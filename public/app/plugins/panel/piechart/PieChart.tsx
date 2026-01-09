@@ -16,6 +16,7 @@ import {
   GrafanaTheme2,
   DataHoverClearEvent,
   DataHoverEvent,
+  LinkModel,
 } from '@grafana/data';
 import { selectors } from '@grafana/e2e-selectors';
 import { t } from '@grafana/i18n';
@@ -28,7 +29,7 @@ import {
   SeriesTable,
   usePanelContext,
 } from '@grafana/ui';
-import { getTooltipContainerStyles, useComponentInstanceId } from '@grafana/ui/internal';
+import { DataLinksContextMenuApi, getTooltipContainerStyles, useComponentInstanceId } from '@grafana/ui/internal';
 
 import { PieChartType, PieChartLabels } from './panelcfg.gen';
 import { filterDisplayItems, sumDisplayItemsReducer } from './utils';
@@ -117,40 +118,40 @@ export const PieChart = ({
             {(pie) => (
               <>
                 {pie.arcs.map((arc) => {
-                    const color = arc.data.display.color ?? FALLBACK_COLOR;
-                    const highlightState = getHighlightState(highlightedTitle, arc);
+                  const color = arc.data.display.color ?? FALLBACK_COLOR;
+                  const highlightState = getHighlightState(highlightedTitle, arc);
 
-                    if (arc.data.hasLinks && arc.data.getLinks) {
-                      return (
-                        <PieSliceWithDataLinks
-                          key={arc.index}
-                          arc={arc}
-                          pie={pie}
-                          highlightState={highlightState}
-                          fill={getGradientColor(color)}
-                          tooltip={tooltip}
-                          tooltipOptions={tooltipOptions}
-                          outerRadius={layout.outerRadius}
-                          innerRadius={layout.innerRadius}
-                          links={arc.data.getLinks}
-                        />
-                      );
-                    } else {
-                      return (
-                        <PieSlice
-                          key={arc.index}
-                          highlightState={highlightState}
-                          tooltip={tooltip}
-                          arc={arc}
-                          pie={pie}
-                          fill={getGradientColor(color)}
-                          tooltipOptions={tooltipOptions}
-                          outerRadius={layout.outerRadius}
-                          innerRadius={layout.innerRadius}
-                        />
-                      );
-                    }
-                  })}
+                  if (arc.data.hasLinks && arc.data.getLinks) {
+                    return (
+                      <PieSliceWithDataLinks
+                        key={arc.index}
+                        arc={arc}
+                        pie={pie}
+                        highlightState={highlightState}
+                        fill={getGradientColor(color)}
+                        tooltip={tooltip}
+                        tooltipOptions={tooltipOptions}
+                        outerRadius={layout.outerRadius}
+                        innerRadius={layout.innerRadius}
+                        links={arc.data.getLinks}
+                      />
+                    );
+                  } else {
+                    return (
+                      <PieSlice
+                        key={arc.index}
+                        highlightState={highlightState}
+                        tooltip={tooltip}
+                        arc={arc}
+                        pie={pie}
+                        fill={getGradientColor(color)}
+                        tooltipOptions={tooltipOptions}
+                        outerRadius={layout.outerRadius}
+                        innerRadius={layout.innerRadius}
+                      />
+                    );
+                  }
+                })}
                 {showLabel &&
                   pie.arcs.map((arc) => {
                     const highlightState = getHighlightState(highlightedTitle, arc);
@@ -195,18 +196,18 @@ interface SliceProps {
   fill: string;
   tooltip: UseTooltipParams<SeriesTableRowProps[]>;
   tooltipOptions: VizTooltipOptions;
-  openMenu?: (event: React.MouseEvent<SVGElement>) => void;
+  openMenu?: DataLinksContextMenuApi['openMenu'];
   outerRadius: number;
   innerRadius: number;
 }
 
 interface PieSliceWithDataLinksProps extends Omit<SliceProps, 'openMenu'> {
-  links: () => any[];
+  links: () => LinkModel[];
 }
 
 interface PieChartDataLinksContextMenuProps {
-  links: () => any[];
-  children: (props: { openMenu?: React.MouseEventHandler<HTMLOrSVGElement> }) => React.ReactElement;
+  links: () => LinkModel[];
+  children: (props: { openMenu?: DataLinksContextMenuApi['openMenu'] }) => React.ReactElement;
   elementRef: React.RefObject<SVGGElement>;
   publishDataHoverEvent: (raw: Event | React.SyntheticEvent) => void;
   publishDataHoverClearEvent: (raw: Event | React.SyntheticEvent) => void;
@@ -253,13 +254,8 @@ function PieChartDataLinksContextMenu({
       setTimeout(ensureNotFocusable, 0);
     }
 
-    const handleAnchorFocus = (e: FocusEvent) => {
-      publishDataHoverEvent(e);
-    };
-
-    const handleAnchorBlur = (e: FocusEvent) => {
-      publishDataHoverClearEvent(e);
-    };
+    const handleAnchorFocus = publishDataHoverEvent;
+    const handleAnchorBlur = publishDataHoverClearEvent;
 
     const handleAnchorKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Tab' && elementRef.current) {
@@ -353,12 +349,7 @@ function PieSliceWithDataLinks({
   );
 
   return (
-    <PieChartDataLinksContextMenu
-      links={links}
-      elementRef={elementRef}
-      publishDataHoverEvent={publishDataHoverEvent}
-      publishDataHoverClearEvent={publishDataHoverClearEvent}
-    >
+    <DataLinksContextMenu links={links}>
       {(api) => (
         <PieSlice
           tooltip={tooltip}
@@ -367,14 +358,13 @@ function PieSliceWithDataLinks({
           pie={pie}
           fill={fill}
           openMenu={api.openMenu}
-          getMenuPosition={api.getMenuPosition}
           tooltipOptions={tooltipOptions}
           outerRadius={outerRadius}
           innerRadius={innerRadius}
           elementRef={elementRef}
         />
       )}
-    </PieChartDataLinksContextMenu>
+    </DataLinksContextMenu>
   );
 }
 
@@ -383,7 +373,6 @@ function PieSlice({
   pie,
   highlightState,
   openMenu,
-  getMenuPosition,
   fill,
   tooltip,
   tooltipOptions,
@@ -455,12 +444,12 @@ function PieSlice({
         });
       }
     },
-    [publishDataHoverEvent, tooltip, pie, tooltipOptions]
+    [publishDataHoverEvent, tooltip, pie, tooltipOptions, arc]
   );
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<SVGGElement>) => {
-      if (hasDataLinks && event.key === 'Enter') {
+      if (hasDataLinks && (event.key === 'Enter' || event.key === ' ')) {
         event.preventDefault();
         event.stopPropagation();
 
@@ -480,21 +469,12 @@ function PieSlice({
               y: svgRect.top + svgRect.height / 2 + centerY + window.scrollY,
             };
 
-            // Use the updated API that supports position objects
-            if (typeof openMenu === 'function' && openMenu.length === 1) {
-              openMenu(position);
-            } else if (getMenuPosition && elementRef.current) {
-              // Fallback: use getMenuPosition if available
-              const calculatedPosition = getMenuPosition(elementRef.current);
-              if (typeof openMenu === 'function') {
-                openMenu(calculatedPosition);
-              }
-            }
+            openMenu(position);
           }
         }
       }
     },
-    [hasDataLinks, openMenu, getMenuPosition, arc, outerRadius, innerRadius]
+    [hasDataLinks, openMenu, arc, outerRadius, innerRadius, elementRef]
   );
 
   const handleFocus = useCallback(
@@ -527,7 +507,7 @@ function PieSlice({
         blurTimeoutRef.current = null;
       }, 100);
     },
-    [publishDataHoverClearEvent]
+    [publishDataHoverClearEvent, elementRef]
   );
 
   useEffect(() => {

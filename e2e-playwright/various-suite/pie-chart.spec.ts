@@ -17,5 +17,9 @@ test.describe(
       );
       await expect(pieChartSlices).toHaveCount(5);
     });
+
+    describe('keyboard accessibility', () => {
+      // FIXME: DATALINKS ACCESSIBILITY TESTS HERE
+    });
   }
 );
