@@ -793,7 +793,8 @@ func (b *bleveBackend) buildShardedIndex(
 		sizePerSubIndex = 1
 	}
 
-	// Create all sub-indexes in parallel
+	// Create all sub-indexes with limited concurrency to avoid overwhelming the file system
+	// Use a worker pool pattern - limit to 8 concurrent index creations
 	type subIndexResult struct {
 		subIndex    *bleveIndex
 		subIndexKey resource.SubIndexKey
@@ -803,12 +804,23 @@ func (b *bleveBackend) buildShardedIndex(
 	results := make([]subIndexResult, b.opts.SubIndexCount)
 	var wg sync.WaitGroup
 
-	logWithDetails.Info("Building sharded index", "sub_index_count", b.opts.SubIndexCount, "size_per_sub_index", sizePerSubIndex)
+	// Limit concurrent index creations to avoid file system contention
+	maxConcurrentIndexCreations := 8
+	if b.opts.SubIndexCount < maxConcurrentIndexCreations {
+		maxConcurrentIndexCreations = b.opts.SubIndexCount
+	}
+	semaphore := make(chan struct{}, maxConcurrentIndexCreations)
+
+	logWithDetails.Info("Building sharded index", "sub_index_count", b.opts.SubIndexCount, "size_per_sub_index", sizePerSubIndex, "max_concurrent", maxConcurrentIndexCreations)
 
 	for i := 0; i < b.opts.SubIndexCount; i++ {
 		wg.Add(1)
 		go func(subIndexID int) {
 			defer wg.Done()
+			// Acquire semaphore
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
 			subKey := resource.SubIndexKey{
 				NamespacedResource: key,
 				SubIndexID:         subIndexID,
@@ -1226,6 +1238,7 @@ func (b *bleveBackend) newCompositeIndex(
 }
 
 // BulkIndex routes documents to the appropriate sub-index based on document key hash.
+// Documents are grouped by sub-index and then indexed in parallel to maximize throughput.
 func (c *compositeIndex) BulkIndex(req *resource.BulkIndexRequest) error {
 	if len(req.Items) == 0 {
 		return nil
@@ -1248,18 +1261,34 @@ func (c *compositeIndex) BulkIndex(req *resource.BulkIndexRequest) error {
 		itemsBySubIndex[subIndexID] = append(itemsBySubIndex[subIndexID], item)
 	}
 
-	// Process each sub-index batch
+	// Process sub-index batches in parallel for better throughput
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(itemsBySubIndex))
+
 	for subIndexID, items := range itemsBySubIndex {
 		if subIndexID >= len(c.subIndexes) {
 			return fmt.Errorf("sub-index ID %d out of range (max %d)", subIndexID, len(c.subIndexes)-1)
 		}
-		subReq := &resource.BulkIndexRequest{
-			Items:           items,
-			ResourceVersion: req.ResourceVersion,
-		}
-		if err := c.subIndexes[subIndexID].BulkIndex(subReq); err != nil {
-			return fmt.Errorf("error indexing to sub-index %d: %w", subIndexID, err)
-		}
+
+		wg.Add(1)
+		go func(idx int, indexItems []*resource.BulkIndexItem) {
+			defer wg.Done()
+			subReq := &resource.BulkIndexRequest{
+				Items:           indexItems,
+				ResourceVersion: req.ResourceVersion,
+			}
+			if err := c.subIndexes[idx].BulkIndex(subReq); err != nil {
+				errCh <- fmt.Errorf("error indexing to sub-index %d: %w", idx, err)
+			}
+		}(subIndexID, items)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	// Return first error if any
+	for err := range errCh {
+		return err
 	}
 
 	return nil
