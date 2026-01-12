@@ -6,6 +6,7 @@ import (
 	"github.com/grafana/grafana/pkg/registry/apps/alerting/historian"
 	"github.com/grafana/grafana/pkg/registry/apps/alerting/notifications"
 	"github.com/grafana/grafana/pkg/registry/apps/alerting/rules"
+	"github.com/grafana/grafana/pkg/registry/apps/anno"
 	"github.com/grafana/grafana/pkg/registry/apps/annotation"
 	"github.com/grafana/grafana/pkg/registry/apps/correlations"
 	"github.com/grafana/grafana/pkg/registry/apps/example"
@@ -30,6 +31,7 @@ var WireSet = wire.NewSet(
 	historian.RegisterAppInstaller,
 	logsdrilldown.RegisterAppInstaller,
 	annotation.RegisterAppInstaller,
+	anno.RegisterAppInstaller,
 	quotas.RegisterAppInstaller,
 	example.RegisterAppInstaller,
 )

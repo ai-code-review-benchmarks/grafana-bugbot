@@ -16,6 +16,7 @@ import (
 	"github.com/grafana/grafana/pkg/registry/apps/alerting/historian"
 	"github.com/grafana/grafana/pkg/registry/apps/alerting/notifications"
 	"github.com/grafana/grafana/pkg/registry/apps/alerting/rules"
+	"github.com/grafana/grafana/pkg/registry/apps/anno"
 	"github.com/grafana/grafana/pkg/registry/apps/annotation"
 	"github.com/grafana/grafana/pkg/registry/apps/correlations"
 	"github.com/grafana/grafana/pkg/registry/apps/example"
@@ -43,6 +44,7 @@ func ProvideAppInstallers(
 	alertingNotificationAppInstaller *notifications.AlertingNotificationsAppInstaller,
 	logsdrilldownAppInstaller *logsdrilldown.LogsDrilldownAppInstaller,
 	annotationAppInstaller *annotation.AnnotationAppInstaller,
+	annoAppInstaller *anno.AnnotationAppInstaller,
 	exampleAppInstaller *example.ExampleAppInstaller,
 	advisorAppInstaller *advisor.AdvisorAppInstaller,
 	alertingHistorianAppInstaller *historian.AlertingHistorianAppInstaller,
@@ -88,6 +90,8 @@ func ProvideAppInstallers(
 	if features.IsEnabledGlobally(featuremgmt.FlagKubernetesAlertingHistorian) && alertingHistorianAppInstaller != nil {
 		installers = append(installers, alertingHistorianAppInstaller)
 	}
+
+	installers = append(installers, annoAppInstaller)
 
 	return installers
 }

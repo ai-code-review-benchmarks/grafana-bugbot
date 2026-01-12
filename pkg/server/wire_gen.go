@@ -81,6 +81,7 @@ import (
 	"github.com/grafana/grafana/pkg/registry/apps/alerting/historian"
 	notifications2 "github.com/grafana/grafana/pkg/registry/apps/alerting/notifications"
 	"github.com/grafana/grafana/pkg/registry/apps/alerting/rules"
+	"github.com/grafana/grafana/pkg/registry/apps/anno"
 	"github.com/grafana/grafana/pkg/registry/apps/annotation"
 	correlations2 "github.com/grafana/grafana/pkg/registry/apps/correlations"
 	"github.com/grafana/grafana/pkg/registry/apps/example"
@@ -813,6 +814,10 @@ func Initialize(ctx context.Context, cfg *setting.Cfg, opts Options, apiOpts api
 	if err != nil {
 		return nil, err
 	}
+	annoAnnotationAppInstaller, err := anno.RegisterAppInstaller(cfg, featureToggles)
+	if err != nil {
+		return nil, err
+	}
 	exampleAppInstaller, err := example.RegisterAppInstaller(cfg, featureToggles)
 	if err != nil {
 		return nil, err
@@ -830,7 +835,7 @@ func Initialize(ctx context.Context, cfg *setting.Cfg, opts Options, apiOpts api
 	if err != nil {
 		return nil, err
 	}
-	v2 := appregistry.ProvideAppInstallers(featureToggles, playlistAppInstaller, appInstaller, shortURLAppInstaller, alertingRulesAppInstaller, correlationsAppInstaller, alertingNotificationsAppInstaller, logsDrilldownAppInstaller, annotationAppInstaller, exampleAppInstaller, advisorAppInstaller, alertingHistorianAppInstaller, quotasAppInstaller)
+	v2 := appregistry.ProvideAppInstallers(featureToggles, playlistAppInstaller, appInstaller, shortURLAppInstaller, alertingRulesAppInstaller, correlationsAppInstaller, alertingNotificationsAppInstaller, logsDrilldownAppInstaller, annotationAppInstaller, annoAnnotationAppInstaller, exampleAppInstaller, advisorAppInstaller, alertingHistorianAppInstaller, quotasAppInstaller)
 	builderMetrics := builder.ProvideBuilderMetrics(registerer)
 	backend := auditing.ProvideNoopBackend()
 	policyRuleProvider := auditing.ProvideNoopPolicyRuleProvider()
@@ -1475,6 +1480,10 @@ func InitializeForTest(ctx context.Context, t sqlutil.ITestDB, testingT interfac
 	if err != nil {
 		return nil, err
 	}
+	annoAnnotationAppInstaller, err := anno.RegisterAppInstaller(cfg, featureToggles)
+	if err != nil {
+		return nil, err
+	}
 	exampleAppInstaller, err := example.RegisterAppInstaller(cfg, featureToggles)
 	if err != nil {
 		return nil, err
@@ -1492,7 +1501,7 @@ func InitializeForTest(ctx context.Context, t sqlutil.ITestDB, testingT interfac
 	if err != nil {
 		return nil, err
 	}
-	v2 := appregistry.ProvideAppInstallers(featureToggles, playlistAppInstaller, appInstaller, shortURLAppInstaller, alertingRulesAppInstaller, correlationsAppInstaller, alertingNotificationsAppInstaller, logsDrilldownAppInstaller, annotationAppInstaller, exampleAppInstaller, advisorAppInstaller, alertingHistorianAppInstaller, quotasAppInstaller)
+	v2 := appregistry.ProvideAppInstallers(featureToggles, playlistAppInstaller, appInstaller, shortURLAppInstaller, alertingRulesAppInstaller, correlationsAppInstaller, alertingNotificationsAppInstaller, logsDrilldownAppInstaller, annotationAppInstaller, annoAnnotationAppInstaller, exampleAppInstaller, advisorAppInstaller, alertingHistorianAppInstaller, quotasAppInstaller)
 	builderMetrics := builder.ProvideBuilderMetrics(registerer)
 	backend := auditing.ProvideNoopBackend()
 	policyRuleProvider := auditing.ProvideNoopPolicyRuleProvider()
