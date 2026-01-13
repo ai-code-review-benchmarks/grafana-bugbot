@@ -74,6 +74,32 @@ var RoleInfo = utils.NewResourceInfo(GROUP, VERSION,
 	},
 )
 
+var GlobalRoleInfo = utils.NewResourceInfo(GROUP, VERSION,
+	"globalroles", "globalrole", "GlobalRole",
+	func() runtime.Object { return &GlobalRole{} },
+	func() runtime.Object { return &GlobalRoleList{} },
+	utils.TableColumns{
+		Definition: []metav1.TableColumnDefinition{
+			{Name: "Name", Type: "string", Format: "name"},
+			{Name: "Group", Type: "string", Format: "group", Description: "Role group"},
+			{Name: "Title", Type: "string", Format: "string", Description: "Role name"},
+			{Name: "Created At", Type: "date"},
+		},
+		Reader: func(obj any) ([]interface{}, error) {
+			globalRole, ok := obj.(*GlobalRole)
+			if ok {
+				return []interface{}{
+					globalRole.Name,
+					globalRole.Spec.Group,
+					globalRole.Spec.Title,
+					globalRole.CreationTimestamp.UTC().Format(time.RFC3339),
+				}, nil
+			}
+			return nil, fmt.Errorf("expected global role")
+		},
+	},
+)
+
 var ResourcePermissionInfo = utils.NewResourceInfo(GROUP, VERSION,
 	"resourcepermissions", "resourcepermission", "ResourcePermission",
 	func() runtime.Object { return &ResourcePermission{} },
@@ -308,6 +334,13 @@ func AddResourcePermissionKnownTypes(scheme *runtime.Scheme, version schema.Grou
 	return nil
 }
 
+func AddGlobalRoleKnownTypes(scheme *runtime.Scheme) error {
+	scheme.AddKnownTypes(SchemeGroupVersion,
+		&GlobalRole{},
+		&GlobalRoleList{},
+	)
+	return nil
+}
 func AddAuthNKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		// Identity
