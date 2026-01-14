@@ -74,7 +74,8 @@ var RoleInfo = utils.NewResourceInfo(GROUP, VERSION,
 	},
 )
 
-var GlobalRoleInfo = utils.NewResourceInfo(GROUP, VERSION,
+var GlobalRoleInfo = globalRoleInfo.WithClusterScope()
+var globalRoleInfo = utils.NewResourceInfo(GROUP, VERSION,
 	"globalroles", "globalrole", "GlobalRole",
 	func() runtime.Object { return &GlobalRole{} },
 	func() runtime.Object { return &GlobalRoleList{} },
@@ -341,6 +342,7 @@ func AddGlobalRoleKnownTypes(scheme *runtime.Scheme) error {
 	)
 	return nil
 }
+
 func AddAuthNKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		// Identity
