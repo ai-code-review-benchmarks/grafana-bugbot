@@ -81,6 +81,17 @@ type service struct {
 }
 
 // ProvideSearchGRPCService provides a gRPC service that only serves search requests.
+// ServiceOption allows customizing service behavior
+type ServiceOption func(*service)
+
+// WithAuthenticator sets a custom authenticator for the service
+// This is primarily intended for testing scenarios
+func WithAuthenticator(authn func(ctx context.Context) (context.Context, error)) ServiceOption {
+	return func(s *service) {
+		s.authenticator = authn
+	}
+}
+
 func ProvideSearchGRPCService(cfg *setting.Cfg,
 	features featuremgmt.FeatureToggles,
 	db infraDB.DB,
@@ -92,8 +103,12 @@ func ProvideSearchGRPCService(cfg *setting.Cfg,
 	memberlistKVConfig kv.Config,
 	httpServerRouter *mux.Router,
 	backend resource.StorageBackend,
+	opts ...ServiceOption,
 ) (UnifiedStorageGrpcService, error) {
 	s := newService(cfg, features, db, log, reg, otel.Tracer("unified-storage"), docBuilders, nil, indexMetrics, searchRing, backend, nil)
+	for _, opt := range opts {
+		opt(s)
+	}
 	s.searchStandalone = true
 	if cfg.EnableSharding {
 		err := s.withRingLifecycle(memberlistKVConfig, httpServerRouter)
@@ -122,8 +137,12 @@ func ProvideUnifiedStorageGrpcService(cfg *setting.Cfg,
 	httpServerRouter *mux.Router,
 	backend resource.StorageBackend,
 	searchClient resourcepb.ResourceIndexClient,
+	opts ...ServiceOption,
 ) (UnifiedStorageGrpcService, error) {
 	s := newService(cfg, features, db, log, reg, otel.Tracer("unified-storage"), docBuilders, storageMetrics, indexMetrics, searchRing, backend, searchClient)
+	for _, opt := range opts {
+		opt(s)
+	}
 
 	// TODO: move to standalone search once we only use sharding in search servers
 	if cfg.EnableSharding {

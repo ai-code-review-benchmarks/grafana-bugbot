@@ -7,25 +7,23 @@ import (
 	"time"
 
 	"github.com/fullstorydev/grpchan"
-	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc"
 
-	"github.com/grafana/authlib/authn"
+	authnlib "github.com/grafana/authlib/authn"
+	"github.com/grafana/authlib/grpcutils"
 	"github.com/grafana/authlib/types"
 	"github.com/grafana/dskit/kv"
 	"github.com/grafana/dskit/services"
 
-	"github.com/grafana/grafana/pkg/apimachinery/identity"
 	"github.com/grafana/grafana/pkg/infra/db"
 	"github.com/grafana/grafana/pkg/infra/log"
-	"github.com/grafana/grafana/pkg/infra/tracing"
 	"github.com/grafana/grafana/pkg/services/featuremgmt"
 	"github.com/grafana/grafana/pkg/setting"
 	"github.com/grafana/grafana/pkg/storage/unified"
 	"github.com/grafana/grafana/pkg/storage/unified/resource"
-	grpcUtils "github.com/grafana/grafana/pkg/storage/unified/resource/grpc"
 	"github.com/grafana/grafana/pkg/storage/unified/resourcepb"
 	"github.com/grafana/grafana/pkg/storage/unified/search"
 	"github.com/grafana/grafana/pkg/storage/unified/sql"
@@ -203,16 +201,13 @@ func TestClientServer(t *testing.T) {
 
 	features := featuremgmt.WithFeatures()
 
-	svc, err := sql.ProvideUnifiedStorageGrpcService(cfg, features, dbstore, nil, prometheus.NewPedanticRegistry(), nil, nil, nil, nil, kv.Config{}, nil, nil, nil)
+	svc, err := sql.ProvideUnifiedStorageGrpcService(cfg, features, dbstore, log.New("test"), prometheus.NewPedanticRegistry(), nil, nil, nil, nil, kv.Config{}, nil, nil, nil,
+		sql.WithAuthenticator(grpcutils.NewUnsafeAuthenticator(otel.Tracer("test"))))
 	require.NoError(t, err)
 	var client resourcepb.ResourceStoreClient
 
-	clientCtx := types.WithAuthInfo(context.Background(), authn.NewAccessTokenAuthInfo(authn.Claims[authn.AccessTokenClaims]{
-		Claims: jwt.Claims{
-			Subject: "testuser",
-		},
-		Rest: authn.AccessTokenClaims{},
-	}))
+	// Use a background context - auth is handled by the client interceptor with in-proc token
+	clientCtx := context.Background()
 
 	t.Run("Start and stop service", func(t *testing.T) {
 		err = services.StartAndAwaitRunning(ctx, svc)
@@ -223,12 +218,10 @@ func TestClientServer(t *testing.T) {
 	t.Run("Create a client", func(t *testing.T) {
 		conn, err := unified.GrpcConn(svc.GetAddress(), prometheus.NewPedanticRegistry())
 		require.NoError(t, err)
-		client, err = resource.NewRemoteResourceClient(tracing.NewNoopTracerService(), conn, conn, resource.RemoteResourceClientConfig{
-			Token:            "some-token",
-			TokenExchangeURL: "http://some-change-url",
-			AllowInsecure:    true,
-		})
-		require.NoError(t, err)
+		// Use authlib client interceptor with in-proc token exchanger
+		clientInt := authnlib.NewGrpcClientInterceptor(resource.ProvideInProcExchanger())
+		cci := grpchan.InterceptClientConn(conn, clientInt.UnaryClientInterceptor, clientInt.StreamClientInterceptor)
+		client = resourcepb.NewResourceStoreClient(cci)
 	})
 
 	t.Run("Create a resource", func(t *testing.T) {
@@ -296,20 +289,13 @@ func TestIntegrationSearchClientServer(t *testing.T) {
 		},
 	}
 
-	svc, err := sql.ProvideSearchGRPCService(cfg, features, dbstore, log.New("test"), prometheus.NewPedanticRegistry(), docBuilders, nil, nil, kv.Config{}, nil, nil)
+	svc, err := sql.ProvideSearchGRPCService(cfg, features, dbstore, log.New("test"), prometheus.NewPedanticRegistry(), docBuilders, nil, nil, kv.Config{}, nil, nil,
+		sql.WithAuthenticator(grpcutils.NewUnsafeAuthenticator(otel.Tracer("test"))))
 	require.NoError(t, err)
 
 	var client resource.SearchClient
-	// Use identity.WithRequester to set up proper auth context for gRPC client interceptors
-	clientCtx := identity.WithRequester(context.Background(), &identity.StaticRequester{
-		Type:    types.TypeUser,
-		UserID:  1,
-		UserUID: "user-uid-1",
-		OrgID:   1,
-		OrgRole: identity.RoleAdmin,
-		Login:   "testuser",
-		Name:    "Test User",
-	})
+	// Use a background context - auth is handled by the client interceptor with in-proc token
+	clientCtx := context.Background()
 
 	t.Run("Start service", func(t *testing.T) {
 		err = services.StartAndAwaitRunning(ctx, svc)
@@ -390,7 +376,7 @@ func TestIntegrationSearchClientServer(t *testing.T) {
 
 var _ resource.SearchClient = (*testSearchClient)(nil)
 
-// testSearchClient implements resource.SearchClient without auth for testing purposes
+// testSearchClient implements resource.SearchClient for testing purposes
 type testSearchClient struct {
 	resourcepb.ResourceIndexClient
 	resourcepb.ManagedObjectIndexClient
@@ -398,7 +384,9 @@ type testSearchClient struct {
 }
 
 func newTestSearchClient(conn grpc.ClientConnInterface) *testSearchClient {
-	cci := grpchan.InterceptClientConn(conn, grpcUtils.UnaryClientInterceptor, grpcUtils.StreamClientInterceptor)
+	// Use authlib client interceptor with in-proc token exchanger
+	clientInt := authnlib.NewGrpcClientInterceptor(resource.ProvideInProcExchanger())
+	cci := grpchan.InterceptClientConn(conn, clientInt.UnaryClientInterceptor, clientInt.StreamClientInterceptor)
 	return &testSearchClient{
 		ResourceIndexClient:      resourcepb.NewResourceIndexClient(cci),
 		ManagedObjectIndexClient: resourcepb.NewManagedObjectIndexClient(cci),
