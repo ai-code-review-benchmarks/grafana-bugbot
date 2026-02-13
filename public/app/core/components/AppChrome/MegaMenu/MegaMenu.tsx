@@ -41,7 +41,7 @@ export const MegaMenu = memo(
 
     const [navTree, setFilteredNavTree] = useState<NavModelItem[]>(rawNavTree);
     const [menuFilterValue, setMenuFilterValue] = useState<string>('');
-    const [allSectionsExpanded, setAllSectionsExpanded] = useState<string>('');
+    const [allSectionsExpanded, setAllSectionsExpanded] = useState<string>('expanded');
 
     // Remove profile + help from tree
     const navItems = navTree
@@ -109,12 +109,6 @@ export const MegaMenu = memo(
       }
     };
 
-    const onToggleAllSections = (expanded: boolean) => {
-      // Set a new key so we re-render the list when collapsing/expanding all sections
-      // as this is driven from localStorage, so component otherwise doesn't know about it
-      setAllSectionsExpanded(expanded ? 'expanded' : 'collapsed');
-    };
-
     const navItemHasMatch = (item: NavModelItem, filter: string): boolean => {
       return (
         item.text.toLowerCase().includes(filter.toLowerCase()) ||
@@ -147,11 +141,7 @@ export const MegaMenu = memo(
     return (
       <div data-testid={selectors.components.NavMenu.Menu} ref={ref} {...restProps}>
         <MegaMenuHeader handleDockedMenu={handleDockedMenu} onClose={onClose} />
-        <MegaMenuControls
-          onToggleAllSections={onToggleAllSections}
-          onFilterChange={onFilterChange}
-          key={allSectionsExpanded}
-        />
+        <MegaMenuControls onFilterChange={onFilterChange} />
 
         <nav className={styles.content}>
           <ScrollContainer height="100%" overflowX="hidden" showScrollIndicators>
@@ -225,7 +215,7 @@ const getStyles = (theme: GrafanaTheme2) => {
       display: 'flex',
       flexDirection: 'column',
       listStyleType: 'none',
-      padding: theme.spacing(1, 1, 2, 0.5),
+      padding: theme.spacing(0, 1, 2, 0.5),
       [theme.breakpoints.up('md')]: {
         width: MENU_WIDTH,
       },
