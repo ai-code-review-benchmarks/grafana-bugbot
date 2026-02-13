@@ -14,12 +14,14 @@ func TestCreateExemplarFrame(t *testing.T) {
 	labels := map[string]string{
 		"foo": "bar",
 	}
-	frame := CreateExemplarFrame(labels, exemplars)
+	unit := "short"
+	frame := CreateExemplarFrame(labels, exemplars, unit)
 
 	require.Equal(t, "exemplar", frame.Name)
 	require.Equal(t, 4, len(frame.Fields))
 	require.Equal(t, "Time", frame.Fields[0].Name)
 	require.Equal(t, "Value", frame.Fields[1].Name)
+	require.Equal(t, "short", frame.Fields[1].Config.Unit)
 	require.Equal(t, "Id", frame.Fields[2].Name)
 	require.Equal(t, "foo", frame.Fields[3].Name)
 
